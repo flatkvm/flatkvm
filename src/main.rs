@@ -28,7 +28,7 @@ use std::thread;
 use clap::{crate_authors, crate_version, App, Arg, SubCommand};
 use dbus::arg::{RefArg, Variant};
 use dbus::{BusType, Connection};
-use log::{debug, error, info};
+use log::{debug, error, info, log};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use x11_clipboard::{Clipboard, Source};
