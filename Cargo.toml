@@ -1,0 +1,15 @@
+[package]
+name = "flatkvm"
+version = "0.1.0"
+authors = ["Sergio Lopez <slp@sinrega.org>"]
+edition = "2018"
+
+[dependencies]
+clap = "=2.27.1"
+dbus = "0.6.4"
+env_logger = "0.6.0"
+log = "0.4"
+rand = "0.6.4"
+
+flatkvm-qemu = { git = "https://github.com/flatkvm/flatkvm-qemu" }
+x11-clipboard = { git = "https://github.com/flatkvm/x11-clipboard" }
