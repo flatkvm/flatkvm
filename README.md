@@ -38,4 +38,8 @@ And execute it with flatkvm:
 ```
 flatkvm run org.mozilla.FirefoxNightly
 ```
+## Other distros
 
+Despite its young age, flatkvm is already quite complex with four different components ([flatkvm](https://github.com/flatkvm/flatkvm), [flatkvm-agent](https://github.com/flatkvm/flatkvm-agent), [flatkvm-linux](https://github.com/flatkvm/flatkvm-linux) and [flatkvm-template-alpine](https://github.com/flatkvm/flatkvm-template-alpine)) interacting between them. Being honest, porting, packaging and testing it for every distro requires an amount of time I don't currently have, so I'm focusing on Fedora.
+
+Or course, if you want to volunteer to port and maintain flatkvm for another distro, you'll be more than welcome! ;-)
