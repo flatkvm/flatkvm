@@ -1,5 +1,7 @@
 Flatkvm is a tool to easily run [flatpak](https://flatpak.org/) apps isolated inside a VM, using QEMU/KVM.
 
+**WARNING**: This is alpha quality software and it'll probably crash and burn in many ways. Use it with care and avoid depending on it for sensitive workloads. If you need trusted isolation, take a look at [Qubes OS](https://www.qubes-os.org/).
+
 # How does it work?
 
 The **flatkvm** binary on the Host executes a QEMU instance accelerated by KVM, using an snapshot of a specialized template as root filesystem. On this template, a Xorg session is started, running [i3wm](https://i3wm.org/) and [flatkvm-agent](https://github.com/flatkvm/flatkvm-agent). The later communicates with the binary on the Host using a **virtio-vsock** device.
