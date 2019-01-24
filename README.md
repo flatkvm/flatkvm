@@ -18,6 +18,8 @@ Afterward, **flatkvm** and **agent** keep the communication open to notify about
  
  - **Some apps refure to run as root**: Due to a limitation in Linux's 9p filesystem driver, the app inside the VM needs to run as **root** user (note this is just the user **inside** the VM, not the user on the Host). Some flatpak apps (VLC, Steam, and possibly others) refuse running as root. This will be eventually solved with some work on the 9p filesystem driver.
  
+ - **Spotify starts up but the VM is immediately shut down**: Spotify (and probably some other apps too) fork+exec's after running, which confuses the **flatkvm-agent** into thinking the app has already existed. The workaround is passing the **-n** flag to **flatkvm run** to disable automatic shut down.
+ 
 # Installing
 ## Fedora
  
