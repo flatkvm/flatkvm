@@ -150,12 +150,15 @@ fn main() {
                 .arg(
                     Arg::with_name("cpus")
                         .long("cpus")
+                        .short("c")
+                        .takes_value(true)
                         .help("Number of vCPUs for the VM (default: 1)"),
                 )
                 .arg(
                     Arg::with_name("mem")
                         .long("mem")
                         .short("m")
+                        .takes_value(true)
                         .help("Amount of RAM in MBs for the VM (default: 1024)"),
                 )
                 .arg(
