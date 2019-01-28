@@ -162,6 +162,11 @@ fn main() {
                         .help("Amount of RAM in MBs for the VM (default: 1024)"),
                 )
                 .arg(
+                    Arg::with_name("alpine")
+                        .long("alpine")
+                        .help("Use a template based on Alpine Linux (default: debian)"),
+                )
+                .arg(
                     Arg::with_name("no-shutdown")
                         .short("n")
                         .long("no-shutdown")
@@ -176,6 +181,11 @@ fn main() {
                     Arg::with_name("no-network")
                         .long("no-network")
                         .help("Disable network emulation"),
+                )
+                .arg(
+                    Arg::with_name("virgl")
+                        .long("virgl")
+                        .help("Enable Virgl 3D acceleration"),
                 )
                 .arg(
                     Arg::with_name("no-clipboard")
@@ -248,9 +258,16 @@ fn main() {
             None => 1024,
         };
 
+        let template = if run_args.is_present("alpine") {
+            "/usr/share/flatkvm/template-alpine.qcow2"
+        } else {
+            "/usr/share/flatkvm/template-debian.qcow2"
+        };
+
         let mut qemu_runner = QemuRunner::new(app.to_string())
             .vcpu_num(cpus)
             .ram_mb(mem)
+            .template(template.to_string())
             .agent_sock_path(agent_sock_path.clone())
             .qmp_sock_path(qmp_sock_path)
             .shared_dir(
@@ -269,6 +286,9 @@ fn main() {
         }
         if run_args.is_present("no-network") {
             qemu_runner = qemu_runner.network(false);
+        }
+        if run_args.is_present("virgl") {
+            qemu_runner = qemu_runner.virgl(true);
         }
 
         let mut volatile_dir: Option<String> = None;
