@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/flatkvm/flatkvm/blob/master/flatkvm.png?raw=true" alt="Flatkvm logo"/>
+  <img src="https://github.com/flatkvm/flatkvm/blob/master/flatkvm.png?raw=true" height="150" width="150" alt="Flatkvm logo"/>
 </p>
 
 Flatkvm is a tool to easily run [flatpak](https://flatpak.org/) apps isolated inside a VM, using QEMU/KVM.
