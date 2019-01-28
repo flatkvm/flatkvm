@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/flatkvm/flatkvm/blob/master/flatkvm.png?raw=true" alt="Flatkvm logo"/>
+</p>
+
 Flatkvm is a tool to easily run [flatpak](https://flatpak.org/) apps isolated inside a VM, using QEMU/KVM.
 
 **WARNING**: This is alpha quality software and it'll probably crash and burn in many ways. Use it with care and avoid depending on it for sensitive workloads. If you need trusted isolation, take a look at [Qubes OS](https://www.qubes-os.org/).
