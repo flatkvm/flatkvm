@@ -16,7 +16,7 @@
 
 use std::collections::HashMap;
 use std::env;
-use std::fs::{create_dir_all, remove_dir_all, remove_file};
+use std::fs::{copy, create_dir_all, remove_file};
 use std::path::Path;
 use std::process::{exit, Command, Stdio};
 use std::sync::atomic::AtomicBool;
@@ -29,8 +29,6 @@ use clap::{crate_authors, crate_version, App, Arg, SubCommand};
 use dbus::arg::{RefArg, Variant};
 use dbus::{BusType, Connection};
 use log::{debug, error, info, log};
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
 use x11_clipboard::{Clipboard, Source};
 
 use flatkvm_qemu::agent::*;
@@ -47,7 +45,8 @@ const FLATPAK_APP_DIR: &str = ".var/app";
 // TODO - This should be configurable
 const FLATKVM_APP_DIR: &str = ".var/flatkvm-app";
 const FLATKVM_RUN_DIR: &str = ".var/run/flatkvm";
-const FLATKVM_TMP_DIR: &str = "/tmp";
+const DEFAULT_TEMPLATE: &str = "/usr/share/flatkvm/template-debian.qcow2";
+const DEFAULT_TEMPLATE_DATA: &str = "/usr/share/flatkvm/template-debian-data.qcow2";
 
 enum Message {
     LocalClipboardEvent(ClipboardEvent),
@@ -162,11 +161,6 @@ fn main() {
                         .help("Amount of RAM in MBs for the VM (default: 1024)"),
                 )
                 .arg(
-                    Arg::with_name("alpine")
-                        .long("alpine")
-                        .help("Use a template based on Alpine Linux (default: debian)"),
-                )
-                .arg(
                     Arg::with_name("no-shutdown")
                         .short("n")
                         .long("no-shutdown")
@@ -202,12 +196,6 @@ fn main() {
                         .long("volatile")
                         .short("v")
                         .help("Use a temporary location for app data"),
-                )
-                .arg(
-                    Arg::with_name("share-flatpak-data")
-                        .long("share-flatpak-data")
-                        .short("s")
-                        .help("Share Host's flatpak app data with VM"),
                 ),
         )
         .get_matches();
@@ -258,16 +246,15 @@ fn main() {
             None => 1024,
         };
 
-        let template = if run_args.is_present("alpine") {
-            "/usr/share/flatkvm/template-alpine.qcow2"
-        } else {
-            "/usr/share/flatkvm/template-debian.qcow2"
-        };
+        let data_disk = format!("{}/{}-disk.qcow2", flatkvm_app_dir, app);
+        if !Path::new(&data_disk).exists() {
+            copy(DEFAULT_TEMPLATE_DATA, &data_disk).expect("can't copy data template");
+        }
 
-        let mut qemu_runner = QemuRunner::new(app.to_string())
+        let mut qemu_runner = QemuRunner::new(app.to_string(), data_disk)
             .vcpu_num(cpus)
             .ram_mb(mem)
-            .template(template.to_string())
+            .template(DEFAULT_TEMPLATE.to_string())
             .agent_sock_path(agent_sock_path.clone())
             .qmp_sock_path(qmp_sock_path)
             .shared_dir(
@@ -281,6 +268,9 @@ fn main() {
                 true,
             );
 
+        if run_args.is_present("volatile") {
+            qemu_runner = qemu_runner.volatile(true);
+        }
         if run_args.is_present("no-audio") {
             qemu_runner = qemu_runner.audio(false);
         }
@@ -289,31 +279,6 @@ fn main() {
         }
         if run_args.is_present("virgl") {
             qemu_runner = qemu_runner.virgl(true);
-        }
-
-        let mut volatile_dir: Option<String> = None;
-
-        if run_args.is_present("volatile") {
-            let mut rng = thread_rng();
-            let randstr: String = rng.sample_iter(&Alphanumeric).take(8).collect();
-            let tmpdir = format!("{}/.flatkvm-{}", FLATKVM_TMP_DIR, randstr);
-            create_dir_all(&tmpdir).expect("can't create temp dir");
-            volatile_dir = Some(tmpdir.clone());
-            qemu_runner = qemu_runner.shared_dir(QemuSharedDirType::FlatpakAppDir, tmpdir, false);
-        } else {
-            if run_args.is_present("share-flatpak-data") {
-                qemu_runner = qemu_runner.shared_dir(
-                    QemuSharedDirType::FlatpakAppDir,
-                    flatpak_app_dir.to_string(),
-                    false,
-                );
-            } else {
-                qemu_runner = qemu_runner.shared_dir(
-                    QemuSharedDirType::FlatpakAppDir,
-                    flatkvm_app_dir.to_string(),
-                    false,
-                );
-            }
         }
 
         let mut qemu_child = qemu_runner.run().expect("can't start QEMU instance");
@@ -458,10 +423,6 @@ fn main() {
                 }
                 Message::QemuExit => {
                     debug!("QEMU has shut down");
-                    match volatile_dir {
-                        Some(dir) => remove_dir_all(dir).expect("can't remove temp directory"),
-                        None => (),
-                    };
                     break;
                 }
             }
