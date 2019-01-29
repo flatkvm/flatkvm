@@ -19,6 +19,7 @@ use std::env;
 use std::fs::{copy, create_dir_all, remove_file};
 use std::path::Path;
 use std::process::{exit, Command, Stdio};
+use std::str::from_utf8;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{channel, Sender};
@@ -125,6 +126,23 @@ fn verify_flatpak_app(app: &str, usermode: bool) -> Result<(), ()> {
     }
 }
 
+fn get_xdg_directory(dir: &str) -> Result<String, ()> {
+    let output = Command::new("xdg-user-dir")
+        .arg(dir)
+        .output()
+        .expect("can't execute xdg-user-dir");
+
+    match from_utf8(&output.stdout) {
+        Ok(p) => {
+            if p.len() == 0 {
+                panic!("Empty output from xdg-user-dir");
+            }
+            Ok(p.to_string().replace("\n", ""))
+        }
+        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+    }
+}
+
 fn main() {
     env_logger::init();
 
@@ -196,6 +214,18 @@ fn main() {
                         .long("volatile")
                         .short("v")
                         .help("Use a temporary location for app data"),
+                )
+                .arg(
+                    Arg::with_name("public-share")
+                        .long("public-share")
+                        .short("p")
+                        .help("Share Host's xdg-public-share directory with VM"),
+                )
+                .arg(
+                    Arg::with_name("download")
+                        .long("download")
+                        .short("d")
+                        .help("Share Host's xdg-download directory with VM"),
                 ),
         )
         .get_matches();
@@ -211,6 +241,8 @@ fn main() {
         let no_clipboard: bool = run_args.is_present("no-clipboard");
         let no_shutdown: bool = run_args.is_present("no-shutdown");
         let no_dbus_notifications: bool = run_args.is_present("no-dbus-notifications");
+        let public_share: bool = run_args.is_present("public-share");
+        let download: bool = run_args.is_present("download");
         let appname = run_args.value_of("app").expect("missing argument");
         let app: &str = match appname.find("/") {
             Some(i) => &appname[..i],
@@ -246,7 +278,7 @@ fn main() {
             None => 1024,
         };
 
-        let data_disk = format!("{}/{}-disk.qcow2", flatkvm_app_dir, app);
+        let data_disk = format!("{}/{}/{}-disk.qcow2", home_dir, FLATKVM_APP_DIR, app);
         if !Path::new(&data_disk).exists() {
             copy(DEFAULT_TEMPLATE_DATA, &data_disk).expect("can't copy data template");
         }
@@ -268,6 +300,18 @@ fn main() {
                 true,
             );
 
+        if public_share {
+            let public_dir =
+                get_xdg_directory("PUBLICSHARE").expect("can't get XDG public share directory");
+            qemu_runner =
+                qemu_runner.shared_dir(QemuSharedDirType::FlatpakPublicDir, public_dir, false);
+        }
+        if download {
+            let download_dir =
+                get_xdg_directory("DOWNLOAD").expect("can't get XDG download directory");
+            qemu_runner =
+                qemu_runner.shared_dir(QemuSharedDirType::FlatpakDownloadDir, download_dir, false);
+        }
         if run_args.is_present("volatile") {
             qemu_runner = qemu_runner.volatile(true);
         }
