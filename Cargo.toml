@@ -1,6 +1,6 @@
 [package]
 name = "flatkvm"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Sergio Lopez <slp@sinrega.org>"]
 edition = "2018"
 
