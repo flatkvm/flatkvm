@@ -35,8 +35,10 @@ use x11_clipboard::{Clipboard, Source};
 use flatkvm_qemu::agent::*;
 use flatkvm_qemu::clipboard::*;
 use flatkvm_qemu::dbus_codegen::*;
-use flatkvm_qemu::dbus_notifications::DbusNotification;
 use flatkvm_qemu::runner::{QemuRunner, QemuSharedDirType};
+
+mod dbus_listener;
+mod message;
 
 // TODO - This should be obtained from flatpak
 const FLATPAK_SYSTEM_DIR: &str = "/var/lib/flatpak";
@@ -49,22 +51,13 @@ const FLATKVM_RUN_DIR: &str = ".var/run/flatkvm";
 const DEFAULT_TEMPLATE: &str = "/usr/share/flatkvm/template-debian.qcow2";
 const DEFAULT_TEMPLATE_DATA: &str = "/usr/share/flatkvm/template-debian-data.qcow2";
 
-enum Message {
-    LocalClipboardEvent(ClipboardEvent),
-    RemoteClipboardEvent(ClipboardEvent),
-    RemoteDbusNotification(DbusNotification),
-    AppExit(i32),
-    AgentClosed,
-    QemuExit,
-}
-
 struct AgentListener {
     agent: AgentHost,
-    sender: Sender<Message>,
+    sender: Sender<message::Message>,
 }
 
 impl AgentListener {
-    pub fn new(agent: AgentHost, sender: Sender<Message>) -> AgentListener {
+    pub fn new(agent: AgentHost, sender: Sender<message::Message>) -> AgentListener {
         AgentListener { agent, sender }
     }
 
@@ -72,21 +65,25 @@ impl AgentListener {
         match self.agent.get_event().expect("Error listening for events") {
             AgentMessage::AgentAppExitCode(ec) => {
                 debug!("Application exited on VM");
-                self.sender.send(Message::AppExit(ec.code)).unwrap();
+                self.sender
+                    .send(message::Message::AppExit(ec.code))
+                    .unwrap();
             }
             AgentMessage::ClipboardEvent(ce) => {
                 debug!("VM sent a clipboard event");
-                self.sender.send(Message::RemoteClipboardEvent(ce)).unwrap();
+                self.sender
+                    .send(message::Message::RemoteClipboardEvent(ce))
+                    .unwrap();
             }
             AgentMessage::DbusNotification(dn) => {
                 debug!("VM sent a dbus notification");
                 self.sender
-                    .send(Message::RemoteDbusNotification(dn))
+                    .send(message::Message::RemoteDbusNotification(dn))
                     .unwrap();
             }
             AgentMessage::AgentClosed => {
                 debug!("Connection to agent closed");
-                self.sender.send(Message::AgentClosed).unwrap();
+                self.sender.send(message::Message::AgentClosed).unwrap();
                 return false;
             }
             _ => panic!("unexpected event"),
@@ -384,7 +381,9 @@ fn main() {
             for msg in &clipboard_receiver {
                 match msg {
                     ClipboardMessage::ClipboardEvent(ce) => {
-                        cb_sender.send(Message::LocalClipboardEvent(ce)).unwrap();
+                        cb_sender
+                            .send(message::Message::LocalClipboardEvent(ce))
+                            .unwrap();
                     }
                 }
             }
@@ -404,7 +403,7 @@ fn main() {
         thread::spawn(move || {
             debug!("Waiting for QEMU process to finish");
             qemu_child.wait().expect("QEMU process wasn't running");
-            exit_sender.send(Message::QemuExit).unwrap();
+            exit_sender.send(message::Message::QemuExit).unwrap();
             debug!("QEMU process finished");
         });
 
@@ -416,15 +415,20 @@ fn main() {
             5000,
         );
 
+        thread::spawn(move || {
+            dbus_listener::handle_dbus_notifications(common_sender.clone());
+        });
+
         // Process events coming from spawned threads.
         let clipboard = Clipboard::new(Source::Clipboard).unwrap();
+        let mut notifications: HashMap<u32, u32> = HashMap::new();
         for msg in common_receiver {
             match msg {
-                Message::LocalClipboardEvent(ce) => {
+                message::Message::LocalClipboardEvent(ce) => {
                     debug!("Clipboard event: {}", ce.data);
                     agent.send_clipboard_event(ce.data).unwrap();
                 }
-                Message::RemoteClipboardEvent(ce) => {
+                message::Message::RemoteClipboardEvent(ce) => {
                     debug!("RemoteClipboard: {}", ce.data);
                     if !no_clipboard {
                         cb_used_flag.store(true, Ordering::Relaxed);
@@ -437,7 +441,7 @@ fn main() {
                             .expect("clipboard.store");
                     }
                 }
-                Message::RemoteDbusNotification(dn) => {
+                message::Message::RemoteDbusNotification(dn) => {
                     debug!("RemoteDbusNotification");
                     if !no_dbus_notifications {
                         // Notifications should have been suppresed from the VM-side,
@@ -445,21 +449,35 @@ fn main() {
                         let actions: Vec<&str> = Vec::new();
                         let hints: HashMap<&str, Variant<Box<RefArg>>> = HashMap::new();
 
-                        dbus_conn_path
-                            .notify(
-                                app,
-                                0,
-                                "",
-                                &dn.summary,
-                                &dn.body,
-                                actions,
-                                hints,
-                                dn.expire_timeout,
-                            )
-                            .unwrap();
+                        match dbus_conn_path.notify(
+                            app,
+                            0,
+                            "",
+                            &dn.summary,
+                            &dn.body,
+                            actions,
+                            hints,
+                            dn.expire_timeout,
+                        ) {
+                            Ok(id) => {
+                                debug!("new notification id: {}", id);
+                                notifications.insert(id, dn.id);
+                            }
+                            Err(_) => debug!("can't get notification id"),
+                        }
                     }
                 }
-                Message::AppExit(ec) => {
+                message::Message::DbusNotificationClosed(nc) => {
+                    debug!("DbusNotificationClosed: {}", nc.id);
+                    if notifications.contains_key(&nc.id) {
+                        debug!("We know this ID");
+                        agent
+                            .send_dbus_notification_closed(notifications[&nc.id], nc.reason)
+                            .unwrap();
+                        notifications.remove(&nc.id);
+                    }
+                }
+                message::Message::AppExit(ec) => {
                     debug!("AppExit with error code: {}", ec);
                     if !no_shutdown {
                         qmp_conn
@@ -468,10 +486,10 @@ fn main() {
                             .unwrap();
                     }
                 }
-                Message::AgentClosed => {
+                message::Message::AgentClosed => {
                     debug!("The agent has closed the connection");
                 }
-                Message::QemuExit => {
+                message::Message::QemuExit => {
                     debug!("QEMU has shut down");
                     break;
                 }
