@@ -354,7 +354,13 @@ fn main() {
             agent.request_mount(dir).expect("error mounting 9p fs");
         }
         agent
-            .request_run(app.to_string(), usermode, !no_dbus_notifications)
+            .request_run(
+                app.to_string(),
+                usermode,
+                !no_dbus_notifications,
+                public_share,
+                download,
+            )
             .expect("error running app");
 
         // Create a specific channel for clipboard messages.
