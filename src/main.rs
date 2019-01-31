@@ -187,6 +187,12 @@ fn main() {
                         .help("Disable audio emulation"),
                 )
                 .arg(
+                    Arg::with_name("pulse-client")
+                        .long("pulse-client")
+                        .short("p")
+                        .help("Instruct the app to act as a PulseAudio client"),
+                )
+                .arg(
                     Arg::with_name("no-network")
                         .long("no-network")
                         .help("Disable network emulation"),
@@ -215,7 +221,7 @@ fn main() {
                 .arg(
                     Arg::with_name("public-share")
                         .long("public-share")
-                        .short("p")
+                        .short("s")
                         .help("Share Host's xdg-public-share directory with VM"),
                 )
                 .arg(
@@ -240,6 +246,7 @@ fn main() {
         let no_dbus_notifications: bool = run_args.is_present("no-dbus-notifications");
         let public_share: bool = run_args.is_present("public-share");
         let download: bool = run_args.is_present("download");
+        let pulse_client: bool = run_args.is_present("pulse-client");
         let appname = run_args.value_of("app").expect("missing argument");
         let app: &str = match appname.find("/") {
             Some(i) => &appname[..i],
@@ -357,6 +364,7 @@ fn main() {
                 !no_dbus_notifications,
                 public_share,
                 download,
+                pulse_client,
             )
             .expect("error running app");
 
