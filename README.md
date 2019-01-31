@@ -10,9 +10,9 @@ Flatkvm is a tool to easily run [flatpak](https://flatpak.org/) apps isolated in
 
 The **flatkvm** binary on the Host executes a QEMU instance accelerated by KVM, using an snapshot of a specialized template as root filesystem, and a per-app virtual disk image which is automatically created on demand. The VM starts an Xorg session running [i3wm](https://i3wm.org/) and [flatkvm-agent](https://github.com/flatkvm/flatkvm-agent), a small program which communicates with the binary on the Host using a **virtio-vsock** device.
 
-Once the session in the VM is ready, **flatkvm** instructs the **agent** to mount the flatpak directories, shared read-only from the Host using **virtio-9p**, and to execute the flatpak application instructed by the user.
+Once the session in the VM is ready, **flatkvm** instructs the **agent** to mount the flatpak directories, shared read-only from the Host using **virtio-9p**, and to execute the flatpak application indicated in by the user in the command line.
 
-Afterward, **flatkvm** and **agent** keep the communication open to notify about clipboard events, D-Bus notifications, and to signal the eventual termination of the flatpak application. Once the flatpak application has exited, **flatkvm** sends an ACPI shutdown signal to the VM using the **QMP** interface.
+Afterward, **flatkvm** and **agent** keep the communication open to notify about clipboard events, D-Bus notifications, and to signal the eventual termination of the flatpak application. Once the app has exited, **flatkvm** sends an ACPI shutdown signal to the VM using the **QMP** interface.
 
 # Demo
 
@@ -22,7 +22,7 @@ Afterward, **flatkvm** and **agent** keep the communication open to notify about
  
  - **If enabled, all clipboard contents of the Host are shared with the VM**: Automatic clipboard sharing implies that all contents of the Host are sent to the VM, and viceversa, which is a significant breach in the isolation. Ideally, clipboard sharing should be on-demand, probably provided by some D-Bus service, and integrated in the UI.
  
- - **Spotify starts up but the VM is immediately shut down**: Spotify (and probably some other apps too) fork+exec's after running, which confuses the **flatkvm-agent** into thinking the app has already existed. The workaround is passing the **-n** flag to **flatkvm run** to disable automatic shut down.
+ - **Spotify starts up but the VM is immediately shut down**: Spotify (and probably some other apps too) fork+exec's after running, which confuses the **flatkvm-agent** into thinking the app has already exited. The workaround is passing the **-n** flag to **flatkvm run** to disable automatic shut down.
  
   - **The first run of Steam takes a long time**: This is the result of combination of **virtio-9p**'s poor performance and Steam insisting of inspecting each library present in the package. After Steam has updated itself, its runtime (and the games) will reside in the dedicated virtual disk, so this will no longer be an issue.
 
