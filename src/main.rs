@@ -292,7 +292,7 @@ fn main() {
             .ram_mb(mem)
             .template(DEFAULT_TEMPLATE.to_string())
             .agent_sock_path(agent_sock_path.clone())
-            .qmp_sock_path(qmp_sock_path)
+            .qmp_sock_path(qmp_sock_path.clone())
             .shared_dir(
                 QemuSharedDirType::FlatpakSystemDir,
                 FLATPAK_SYSTEM_DIR.to_string(),
@@ -338,6 +338,9 @@ fn main() {
         qmp_conn
             .initialize()
             .expect("error initializing QMP connection");
+        remove_file(qmp_sock_path)
+            .map_err(|err| debug!("can't remove file: {}", err.to_string()))
+            .unwrap();
 
         debug!("Waiting for agent...");
         let mut agent = qemu_runner
