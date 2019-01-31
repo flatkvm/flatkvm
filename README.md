@@ -16,7 +16,7 @@ Afterward, **flatkvm** and **agent** keep the communication open to notify about
 
 # Demo
 
-[![Video](https://img.youtube.com/vi/4oju5BRBVpw/maxresdefault.jpg)](https://youtu.be/4oju5BRBVpw)
+[![Video](https://img.youtube.com/vi/K_FizklyrKs/maxresdefault.jpg)](https://youtu.be/K_FizklyrKs)
 
 # Known issues
  
