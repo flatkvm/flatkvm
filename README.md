@@ -25,6 +25,10 @@ Afterward, **flatkvm** and **agent** keep the communication open to notify about
  - **Spotify starts up but the VM is immediately shut down**: Spotify (and probably some other apps too) fork+exec's after running, which confuses the **flatkvm-agent** into thinking the app has already exited. The workaround is passing the **-n** flag to **flatkvm run** to disable automatic shut down.
  
   - **The first run of Steam takes a long time**: This is the result of combination of **virtio-9p**'s poor performance and Steam insisting of inspecting each library present in the package. After Steam has updated itself, its runtime (and the games) will reside in the dedicated virtual disk, so this will no longer be an issue.
+  
+  - **VirtualBox can't start any VM when there's a Flatkvm application running**: Flatkvm uses KVM, which implies loading and initializing **kvm.ko**. As multiple virtualization technologies can't be simultaneously enabled on the same machine, VirtualBox can't be used in parallel with Flatkvm. The only possible workaround is switching from VirtualBox to **virt-manager**.
+  
+  - **KeepassXC can't save nor open any database**: KeepassXC, and possibly other apps, doesn't play nice with xdg-desktop-portal file access model. This is something that needs to be fixed from the application packaging and there's no workaround.
 
  
 # Installing
