@@ -30,7 +30,7 @@ use clap::{crate_authors, crate_version, App, Arg, SubCommand};
 use dbus::arg::{RefArg, Variant};
 use dbus::{BusType, Connection};
 use log::{debug, error, info, log};
-use x11_clipboard::{Clipboard, Source};
+use x11_clipboard::Clipboard;
 
 use flatkvm_qemu::agent::*;
 use flatkvm_qemu::clipboard::*;
@@ -50,6 +50,13 @@ const FLATKVM_APP_DIR: &str = ".var/flatkvm-app";
 const FLATKVM_RUN_DIR: &str = ".var/run/flatkvm";
 const DEFAULT_TEMPLATE: &str = "/usr/share/flatkvm/template-debian.qcow2";
 const DEFAULT_TEMPLATE_DATA: &str = "/usr/share/flatkvm/template-debian-data.qcow2";
+
+#[derive(Eq, PartialEq)]
+enum ClipboardMode {
+    Auto,
+    Discrete,
+    Off,
+}
 
 struct AgentListener {
     agent: AgentHost,
@@ -203,9 +210,11 @@ fn main() {
                         .help("Enable Virgl 3D acceleration"),
                 )
                 .arg(
-                    Arg::with_name("no-clipboard")
-                        .long("no-clipboard")
-                        .help("Disable automatic clipboard sharing"),
+                    Arg::with_name("clipboard")
+                        .long("clipboard")
+                        .short("b")
+                        .takes_value(true)
+                        .help("Set clipboard mode: auto (default), discrete, off"),
                 )
                 .arg(
                     Arg::with_name("no-dbus-notifications")
@@ -241,7 +250,6 @@ fn main() {
 
     if let Some(run_args) = cmd_args.subcommand_matches("run") {
         let usermode = cmd_args.is_present("user") || run_args.is_present("user");
-        let no_clipboard: bool = run_args.is_present("no-clipboard");
         let no_shutdown: bool = run_args.is_present("no-shutdown");
         let no_dbus_notifications: bool = run_args.is_present("no-dbus-notifications");
         let public_share: bool = run_args.is_present("public-share");
@@ -329,6 +337,23 @@ fn main() {
             qemu_runner = qemu_runner.virgl(true);
         }
 
+        let mut clipboard_mode = ClipboardMode::Auto;
+        if run_args.is_present("clipboard") {
+            match run_args.value_of("clipboard") {
+                Some("auto") => clipboard_mode = ClipboardMode::Auto,
+                Some("discrete") => clipboard_mode = ClipboardMode::Discrete,
+                Some("off") => clipboard_mode = ClipboardMode::Off,
+                Some(_cbmode) => {
+                    error!("invalid clipboard mode");
+                    exit(-1)
+                }
+                None => {
+                    error!("invalid clipboard mode");
+                    exit(-1)
+                }
+            }
+        }
+
         let mut qemu_child = qemu_runner.run().expect("can't start QEMU instance");
 
         debug!("Opening QMP connection...");
@@ -376,11 +401,18 @@ fn main() {
 
         // Spawn a thread to listen for clipboard events.
         let cb_used_flag = Arc::new(AtomicBool::new(false));
-        if !no_clipboard {
-            // TODO - If enabled, we share data push into the clipboard
-            // with the VM. Ideally, there should be a dbus service
-            // listenting for an event generated from some kind of UI.
-            ClipboardListener::new(clipboard_sender.clone(), cb_used_flag.clone()).spawn_thread();
+        if clipboard_mode != ClipboardMode::Off {
+            let mut clipboard_listener =
+                ClipboardListener::new(clipboard_sender.clone(), cb_used_flag.clone());
+            if clipboard_mode == ClipboardMode::Discrete {
+                let name = format!("FK{}", std::process::id());
+                debug!("Setting clipboard selection name to: {}", name);
+                clipboard_listener
+                    .set_selection(&name)
+                    .expect("can't set clipboard selection name");
+                debug!("Clipboard selection atom: {}", clipboard_listener.get_selection());
+            }
+            clipboard_listener.spawn_thread();
         }
 
         // Create a channel for general thread coordination.
@@ -431,7 +463,7 @@ fn main() {
         });
 
         // Process events coming from spawned threads.
-        let clipboard = Clipboard::new(Source::Clipboard).unwrap();
+        let clipboard = Clipboard::new().unwrap();
         let mut notifications: HashMap<u32, u32> = HashMap::new();
         for msg in common_receiver {
             match msg {
@@ -441,7 +473,7 @@ fn main() {
                 }
                 message::Message::RemoteClipboardEvent(ce) => {
                     debug!("RemoteClipboard: {}", ce.data);
-                    if !no_clipboard {
+                    if clipboard_mode != ClipboardMode::Off {
                         cb_used_flag.store(true, Ordering::Relaxed);
                         clipboard
                             .store(
