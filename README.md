@@ -21,6 +21,7 @@ Afterward, **flatkvm** and **agent** keep the communication open to notify about
 # Known issues
  
  - **If enabled, all clipboard contents of the Host are shared with the VM**: Automatic clipboard sharing implies that all contents of the Host are sent to the VM, and viceversa, which is a significant breach in the isolation. Ideally, clipboard sharing should be on-demand, probably provided by some D-Bus service, and integrated in the UI.
+   - On version **0.1.5**, flatpak implements the *discrete* clipboard mode, which can be selected by passing the *--clipboard discrete* argument on the command line. In this mode, the flatkvm no longer sends all Host's clipboard updates to the VM. Instead, clipboard data must explicitly shared using [flatkvm-paste](https://github.com/flatkvm/flatkvm-paste).
  
  - **Two-finger/wheel scrolling doesn't work**: QEMU's GTK UI seems to have trouble receiving scrolling events on Wayland. The workaround is switching to **GNOME on Xorg**. This is being tracked in [#3](https://github.com/flatkvm/flatkvm/issues/3).
  
