@@ -30,6 +30,7 @@ use clap::{crate_authors, crate_version, App, Arg, SubCommand};
 use dbus::arg::{RefArg, Variant};
 use dbus::{BusType, Connection};
 use log::{debug, error, info, log};
+use regex::Regex;
 use x11_clipboard::Clipboard;
 
 use flatkvm_qemu::agent::*;
@@ -130,6 +131,25 @@ fn verify_flatpak_app(app: &str, usermode: bool) -> Result<(), ()> {
     }
 }
 
+fn get_keyboard_layout() -> Result<String, ()> {
+    let args = vec!["-query"];
+
+    let output = Command::new("setxkbmap")
+        .args(&args)
+        .output()
+        .map_err(|err| {
+            error!("can't execute flatpak: {}", err.to_string());
+            exit(-1);
+        })?;
+
+    let re = Regex::new(r".*layout: +(.*)").unwrap();
+    let s: String = String::from_utf8(output.stdout).unwrap();
+    let caps = re.captures(&s).unwrap();
+    Ok(caps
+        .get(1)
+        .map_or("".to_string(), |m| m.as_str().to_string()))
+}
+
 fn get_xdg_directory(dir: &str) -> Result<String, ()> {
     let output = Command::new("xdg-user-dir")
         .arg(dir)
@@ -181,6 +201,12 @@ fn main() {
                         .short("m")
                         .takes_value(true)
                         .help("Amount of RAM in MBs for the VM (default: 1024)"),
+                )
+                .arg(
+                    Arg::with_name("xkb-layout")
+                        .short("k")
+                        .takes_value(true)
+                        .help("XKB layout to be requested on the VM"),
                 )
                 .arg(
                     Arg::with_name("no-shutdown")
@@ -268,6 +294,17 @@ fn main() {
                 exit(-1);
             }
         }
+
+        let xkb_layout = match run_args.value_of("xkb-layout") {
+            Some(layout) => {
+                if layout.len() > 3 {
+                    error!("invalid xkb layout");
+                    exit(-1);
+                }
+                layout.to_string()
+            }
+            None => get_keyboard_layout().unwrap(),
+        };
 
         let flatpak_app_dir = format!("{}/{}/{}", home_dir, FLATPAK_APP_DIR, app);
         if !Path::new(&flatpak_app_dir).exists() {
@@ -381,6 +418,9 @@ fn main() {
             .unwrap();
 
         debug!("Sending commands to agent");
+        agent
+            .request_layout(xkb_layout)
+            .expect("error requesting xkb layout");
         for dir in qemu_runner.get_shared_dirs() {
             debug!("Requesting mount for shared_dir: {:?}", dir);
             agent.request_mount(dir).expect("error mounting 9p fs");
@@ -410,7 +450,10 @@ fn main() {
                 clipboard_listener
                     .set_selection(&name)
                     .expect("can't set clipboard selection name");
-                debug!("Clipboard selection atom: {}", clipboard_listener.get_selection());
+                debug!(
+                    "Clipboard selection atom: {}",
+                    clipboard_listener.get_selection()
+                );
             }
             clipboard_listener.spawn_thread();
         }
